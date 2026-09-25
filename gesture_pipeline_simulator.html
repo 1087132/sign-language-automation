@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>n8n Agentic Pipeline Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; }
+        .step-active { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+        .step-idle { background-color: white; color: #9ca3af; border-color: #e5e7eb; }
+        .route-active-cmd { border-color: #3b82f6; background-color: #eff6ff; box-shadow: 0 0 0 1px #3b82f6; }
+        .route-active-qst { border-color: #f59e0b; background-color: #fffbeb; box-shadow: 0 0 0 1px #f59e0b; }
+        .route-active-stmt { border-color: #10b981; background-color: #ecfdf5; box-shadow: 0 0 0 1px #10b981; }
+        .route-idle { border-color: #f3f4f6; opacity: 0.6; filter: grayscale(100%); }
+        
+        /* Custom scrollbar for logs */
+        #log-container::-webkit-scrollbar { width: 6px; }
+        #log-container::-webkit-scrollbar-track { background: #f1f5f9; }
+        #log-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-50 p-8 text-slate-800">
+
+    <div class="max-w-5xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-900">n8n Agentic Pipeline Simulator</h1>
+            <p class="text-slate-500">Vanilla JS Port: Hardware Token Translation & Dynamic Routing</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left Column: Inputs -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center">
+                        <i data-lucide="terminal" class="w-5 h-5 mr-2"></i> Raw Input
+                    </h2>
+                    
+                    <div class="mb-4">
+                        <p class="text-xs font-semibold text-slate-500 mb-2">QUICK PRESETS</p>
+                        <div class="space-y-2">
+                            <button onclick="handlePreset(['LIGHT', 'LIVING_ROOM', 'TURN_ON', 'PLEASE'])" class="w-full text-left px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition">💡 Smart Home Command</button>
+                            <button onclick="handlePreset(['SYSTEM', 'ERROR', 'YOU', 'HELP', 'ME'])" class="w-full text-left px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition">❓ Support Question</button>
+                            <button onclick="handlePreset(['TIME_MORNING', 'ME', 'MAKE', 'COFFEE'])" class="w-full text-left px-3 py-2 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition">📝 Daily Log Statement</button>
+                        </div>
+                    </div>
+
+                    <form id="token-form" class="flex space-x-2 mb-4">
+                        <input 
+                            type="text" 
+                            id="token-input"
+                            placeholder="Add token (e.g. DOOR)..." 
+                            class="flex-1 px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button type="submit" class="px-4 py-2 bg-slate-800 text-white rounded-md text-sm hover:bg-slate-700">+</button>
+                    </form>
+
+                    <div id="token-container" class="flex flex-wrap gap-2 mb-6 min-h-[50px] p-2 bg-slate-50 border rounded-md">
+                        <span id="empty-tokens-msg" class="text-slate-400 text-sm italic">No tokens added...</span>
+                    </div>
+
+                    <button 
+                        id="trigger-btn"
+                        onclick="runPipeline()"
+                        disabled
+                        class="w-full py-2.5 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center transition-colors"
+                    >
+                        <i data-lucide="play" class="w-4 h-4 mr-2"></i> Trigger Webhook
+                    </button>
+                    <button 
+                        onclick="clearAll()"
+                        class="w-full mt-2 py-2 text-slate-500 text-sm hover:text-slate-800 transition-colors"
+                    >
+                        Clear All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column: Pipeline & Output -->
+            <div class="lg:col-span-2 space-y-6">
+                
+                <!-- Pipeline Visualizer -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-lg font-semibold mb-6 flex items-center">
+                        <i data-lucide="network" class="w-5 h-5 mr-2"></i> n8n Workflow State
+                    </h2>
+                    
+                    <div class="flex justify-between items-center relative before:absolute before:inset-0 before:top-1/2 before:-translate-y-1/2 before:h-1 before:bg-slate-100 before:z-0">
+                        
+                        <div id="step-WEBHOOK" class="step-idle relative z-10 flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors duration-500 w-24">
+                            <i data-lucide="network" class="w-6 h-6"></i>
+                            <span class="text-xs font-bold">Webhook</span>
+                        </div>
+
+                        <div id="step-LLM" class="step-idle relative z-10 flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors duration-500 w-24">
+                            <i data-lucide="cpu" class="w-6 h-6"></i>
+                            <span class="text-xs font-bold">LLM Agent</span>
+                        </div>
+
+                        <div id="step-ROUTING" class="step-idle relative z-10 flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors duration-500 w-24">
+                            <i data-lucide="alert-circle" class="w-6 h-6"></i>
+                            <span class="text-xs font-bold">Switch Node</span>
+                        </div>
+
+                        <div id="step-COMPLETE" class="step-idle relative z-10 flex flex-col items-center gap-2 p-2 rounded-lg border-2 transition-colors duration-500 w-24">
+                            <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+                            <span class="text-xs font-bold">API Exec</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results & Routing -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- LLM JSON Output -->
+                    <div class="bg-slate-900 rounded-xl shadow-sm overflow-hidden flex flex-col h-48">
+                        <div class="px-4 py-2 bg-slate-800 border-b border-slate-700">
+                            <span class="text-xs font-mono text-slate-300">Parsed JSON Payload</span>
+                        </div>
+                        <div class="p-4 flex-1 overflow-auto">
+                            <pre id="json-output" class="text-green-400 text-xs font-mono whitespace-pre-wrap"><span class="text-slate-500 italic">Waiting for execution...</span></pre>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Routing Destinations -->
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                        <h2 class="text-sm font-bold text-slate-500 mb-4 tracking-wider">ROUTING DESTINATION</h2>
+                        <div class="space-y-3">
+                            <div id="route-COMMAND" class="route-idle p-3 border rounded-lg flex items-center justify-between transition-all duration-500">
+                                <span class="font-semibold text-sm text-slate-700">Smart Home API</span>
+                                <span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded font-mono">POST</span>
+                            </div>
+                            <div id="route-QUESTION" class="route-idle p-3 border rounded-lg flex items-center justify-between transition-all duration-500">
+                                <span class="font-semibold text-sm text-slate-700">TTS Engine</span>
+                                <span class="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded font-mono">POST</span>
+                            </div>
+                            <div id="route-STATEMENT" class="route-idle p-3 border rounded-lg flex items-center justify-between transition-all duration-500">
+                                <span class="font-semibold text-sm text-slate-700">Database / Logs</span>
+                                <span class="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded font-mono">PUT</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Logs -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h2 class="text-sm font-semibold mb-3 flex items-center text-slate-500">
+                        <i data-lucide="message-square" class="w-4 h-4 mr-2"></i> Execution Logs
+                    </h2>
+                    <div id="log-container" class="h-32 overflow-y-auto bg-slate-50 p-3 border rounded-md font-mono text-xs text-slate-600 space-y-1 flex flex-col-reverse">
+                        <!-- Logs injected here -->
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // State
+        let currentTokens = [];
+        let isProcessing = false;
+
+        // DOM Elements
+        const tokenInput = document.getElementById('token-input');
+        const tokenForm = document.getElementById('token-form');
+        const tokenContainer = document.getElementById('token-container');
+        const emptyMsg = document.getElementById('empty-tokens-msg');
+        const triggerBtn = document.getElementById('trigger-btn');
+        const jsonOutput = document.getElementById('json-output');
+        const logContainer = document.getElementById('log-container');
+
+        const pipelineSteps = ['WEBHOOK', 'LLM', 'ROUTING', 'COMPLETE'];
+        const routes = ['COMMAND', 'QUESTION', 'STATEMENT'];
+
+        // Event Listeners
+        tokenForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const val = tokenInput.value.trim().toUpperCase();
+            if (val) {
+                currentTokens.push(val);
+                tokenInput.value = '';
+                renderTokens();
+            }
+        });
+
+        // UI Functions
+        function renderTokens() {
+            if (currentTokens.length === 0) {
+                tokenContainer.innerHTML = '';
+                tokenContainer.appendChild(emptyMsg);
+                triggerBtn.disabled = true;
+                return;
+            }
+
+            tokenContainer.innerHTML = '';
+            currentTokens.forEach((token) => {
+                const span = document.createElement('span');
+                span.className = 'px-2 py-1 bg-blue-100 text-blue-800 text-xs font-mono rounded border border-blue-200 inline-block';
+                span.textContent = token;
+                tokenContainer.appendChild(span);
+            });
+            
+            triggerBtn.disabled = isProcessing;
+        }
+
+        function handlePreset(tokens) {
+            if(isProcessing) return;
+            currentTokens = [...tokens];
+            resetUI();
+            renderTokens();
+        }
+
+        function clearAll() {
+            if(isProcessing) return;
+            currentTokens = [];
+            resetUI();
+            renderTokens();
+        }
+
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.textContent = `[${time}] ${message}`;
+            // Prepend because flex-col-reverse is used to keep scroll at bottom
+            logContainer.prepend(div); 
+        }
+
+        function updateStepUI(activeStepIndex) {
+            pipelineSteps.forEach((step, index) => {
+                const el = document.getElementById(`step-${step}`);
+                if (index <= activeStepIndex) {
+                    el.classList.remove('step-idle');
+                    el.classList.add('step-active');
+                } else {
+                    el.classList.remove('step-active');
+                    el.classList.add('step-idle');
+                }
+            });
+        }
+
+        function updateRouteUI(activeIntent) {
+            routes.forEach(route => {
+                const el = document.getElementById(`route-${route}`);
+                el.classList.remove('route-active-cmd', 'route-active-qst', 'route-active-stmt', 'route-idle');
+                
+                if (route === activeIntent) {
+                    if (route === 'COMMAND') el.classList.add('route-active-cmd');
+                    if (route === 'QUESTION') el.classList.add('route-active-qst');
+                    if (route === 'STATEMENT') el.classList.add('route-active-stmt');
+                } else {
+                    el.classList.add('route-idle');
+                }
+            });
+        }
+
+        function resetUI() {
+            updateStepUI(-1);
+            updateRouteUI(null);
+            jsonOutput.innerHTML = '<span class="text-slate-500 italic">Waiting for execution...</span>';
+            logContainer.innerHTML = '';
+        }
+
+        // Mock API logic (to simulate the Express server response)
+        function simulateK2Processing(tokens) {
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    const tokenStr = tokens.join(" ");
+                    if (tokenStr.includes("LIGHT") || tokenStr.includes("OPEN")) {
+                        resolve({ original_tokens: tokens, translated_text: "Please turn on the living room lights.", intent: "COMMAND" });
+                    } else if (tokenStr.includes("ERROR") || tokenStr.includes("HELP")) {
+                        resolve({ original_tokens: tokens, translated_text: "The system has an error. Can you help me?", intent: "QUESTION" });
+                    } else {
+                        resolve({ original_tokens: tokens, translated_text: "I made coffee this morning.", intent: "STATEMENT" });
+                    }
+                }, 1500); 
+            });
+        }
+
+        // Pipeline Execution
+        async function runPipeline() {
+            if (currentTokens.length === 0 || isProcessing) return;
+            
+            isProcessing = true;
+            triggerBtn.disabled = true;
+            resetUI();
+            
+            // Step 0: Webhook
+            updateStepUI(0);
+            addLog("Webhook triggered: Receiving raw token stream...");
+            
+            // Step 1: LLM 
+            setTimeout(async () => {
+                updateStepUI(1);
+                addLog("Transmitting tokens to Mock LLM Backend...");
+                
+                // Note: To use the real backend, replace simulateK2Processing with a fetch() call
+                // to http://localhost:3001/webhook/gestures
+                const response = await simulateK2Processing(currentTokens);
+                
+                // Step 2: Routing
+                updateStepUI(2);
+                jsonOutput.textContent = JSON.stringify(response, null, 2);
+                updateRouteUI(response.intent);
+                addLog(`JSON Parsed. Intent classified as: ${response.intent}`);
+                
+                // Step 3: Complete
+                setTimeout(() => {
+                    updateStepUI(3);
+                    let target = response.intent === 'COMMAND' ? 'Smart Home API' 
+                               : response.intent === 'QUESTION' ? 'TTS / Support API' 
+                               : 'Logging API';
+                    addLog(`Routed to endpoint: ${target}`);
+                    
+                    isProcessing = false;
+                    triggerBtn.disabled = false;
+                }, 800);
+                
+            }, 800);
+        }
+    </script>
+</body>
+</html>
